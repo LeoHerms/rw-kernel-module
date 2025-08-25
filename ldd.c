@@ -11,8 +11,12 @@ MODULE_DESCRIPTION("Currently, a simple read and write kernel module");
 // - enhanced functionality (ioctl, seek, logging)
 // - cleanup paths and robustness
 
+static int buffer_size = 100;
+module_param(buffer_size, int, 0644);
+MODULE_PARM_DESC(buffer_size, "Size of the message buffer");
+
 static struct proc_dir_entry *custom_proc_node;
-static char msg[102] = {0};				// It's 102 to allow for 100 characters to be fit in
+static char msg[102] = {0};
 
 static ssize_t my_read(struct file *file_pointer, char *user_space_buffer, size_t count, loff_t *offset) {
 	size_t len = strlen(msg);
@@ -50,24 +54,22 @@ struct proc_ops driver_proc_ops = {		// Driver operations
 };
 
 static int __init my_init (void) {	
-	printk("my_init: entry\n");		// Logging entry
 	custom_proc_node = proc_create("my_driver", 0666, NULL, &driver_proc_ops);	// Maybe add a check?
 						
-	if (custom_proc_node == NULL) {		// I think this is safe enough?
-		printk("my_init: error");
+	if (custom_proc_node == NULL) {
+		pr_err("my_driver: Failed to create proc entry\n");
 		return -1;
 	}
 
-	strscpy(msg, "Hey there!\n", sizeof(msg));		// Make this safer (IDK if strcpy is all that safe)
-
-	printk("my_init: exit\n");		// Logging exit
+	strscpy(msg, "Hey there!\n", sizeof(msg));
+	
+	pr_info("my_driver: Module loaded\n");
 	return 0;
 }
 
 static void __exit my_exit (void) {
-	printk("my_exit: entry\n");		// Logging entry
-	proc_remove(custom_proc_node);		
-	printk("my_exit: exit\n");		// Logging exit
+	proc_remove(custom_proc_node);			// This doesn't return anything :/	
+	pr_info("my_driver: Module unloaded\n");
 }
 
 module_init(my_init);
