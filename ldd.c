@@ -16,17 +16,14 @@ static char msg[102] = {0};				// It's 102 to allow for 100 characters to be fit
 
 static ssize_t my_read(struct file *file_pointer, char *user_space_buffer, size_t count, loff_t *offset) {
 	size_t len = strlen(msg);
+	size_t bytes_to_copy = min(count, len - *offset);
 
-	if (*offset >= len) {
-                return 0;
-        }
-
-	if (copy_to_user(user_space_buffer, msg, len)) {	// c_t_u(dest, src, # of bytes)
+	if (copy_to_user(user_space_buffer, msg + *offset, bytes_to_copy)) {
 		return -EFAULT;
-	}
+	}	
 
-	*offset += len;
-	return len;	// return the number of bytes that are written back to the user space
+	*offset += bytes_to_copy;
+	return bytes_to_copy;
 }
 
 static ssize_t	my_write(struct file *file_pointer, const char *user_space_buffer, size_t count, loff_t *offset) {
