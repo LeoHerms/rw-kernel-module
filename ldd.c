@@ -12,7 +12,7 @@ MODULE_DESCRIPTION("Currently, a simple read and write kernel module");
 // - cleanup paths and robustness
 
 static struct proc_dir_entry *custom_proc_node;
-char msg[100];
+static char msg[102] = {0};				// It's 102 to allow for 100 characters to be fit in
 
 static ssize_t my_read(struct file *file_pointer, char *user_space_buffer, size_t count, loff_t *offset) {
 	size_t len = strlen(msg);
@@ -21,26 +21,27 @@ static ssize_t my_read(struct file *file_pointer, char *user_space_buffer, size_
                 return 0;
         }
 
-	// Using this API
-	// copy_to_user(destination, source, number of bytes)
-	int result;
-	result = copy_to_user(user_space_buffer, msg, len);
-	printk("my_read: entry\n");
+	if (copy_to_user(user_space_buffer, msg, len)) {	// c_t_u(dest, src, # of bytes)
+		return -EFAULT;
+	}
 
 	*offset += len;
-
 	return len;	// return the number of bytes that are written back to the user space
 }
 
 static ssize_t	my_write(struct file *file_pointer, const char *user_space_buffer, size_t count, loff_t *offset) {
-	if (count >= 100) {
-		return -ENOMEM;
+	if (count >= sizeof(msg)) {	// Removing equals causes seg fault when reading back input of size 99
+		return -ENOSPC;
 	}
-	// Use the copy_x_user API
+	
+	if (!user_space_buffer) {
+		return -EINVAL;		// Invalid argument
+	}
+
 	if (copy_from_user(msg, user_space_buffer, count)) {
 		return -EFAULT;
-	}								
-	printk("my_write: entry\n");
+	}
+
 	msg[count] = '\0';
 	*offset += count;
 	return count;
@@ -51,7 +52,7 @@ struct proc_ops driver_proc_ops = {		// Driver operations
 	.proc_write = my_write
 };
 
-static int my_init (void) {	
+static int __init my_init (void) {	
 	printk("my_init: entry\n");		// Logging entry
 	custom_proc_node = proc_create("my_driver", 0666, NULL, &driver_proc_ops);	// Maybe add a check?
 						
@@ -60,13 +61,13 @@ static int my_init (void) {
 		return -1;
 	}
 
-	strcpy(msg, "Hey there!\n");		// Make this safer (IDK if strcpy is all that safe)
+	strscpy(msg, "Hey there!\n", sizeof(msg));		// Make this safer (IDK if strcpy is all that safe)
 
 	printk("my_init: exit\n");		// Logging exit
 	return 0;
 }
 
-static void my_exit (void) {
+static void __exit my_exit (void) {
 	printk("my_exit: entry\n");		// Logging entry
 	proc_remove(custom_proc_node);		
 	printk("my_exit: exit\n");		// Logging exit
