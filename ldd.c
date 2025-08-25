@@ -16,13 +16,13 @@ module_param(buffer_size, int, 0644);
 MODULE_PARM_DESC(buffer_size, "Size of the message buffer");
 
 static struct proc_dir_entry *custom_proc_node;
-static char msg[102] = {0};
+static char *msg_buffer;
 
 static ssize_t my_read(struct file *file_pointer, char *user_space_buffer, size_t count, loff_t *offset) {
-	size_t len = strlen(msg);
+	size_t len = strlen(msg_buffer);
 	size_t bytes_to_copy = min(count, len - *offset);
 
-	if (copy_to_user(user_space_buffer, msg + *offset, bytes_to_copy)) {
+	if (copy_to_user(user_space_buffer, msg_buffer + *offset, bytes_to_copy)) {
 		return -EFAULT;
 	}	
 
@@ -31,7 +31,7 @@ static ssize_t my_read(struct file *file_pointer, char *user_space_buffer, size_
 }
 
 static ssize_t	my_write(struct file *file_pointer, const char *user_space_buffer, size_t count, loff_t *offset) {
-	if (count >= sizeof(msg)) {	// Removing equals causes seg fault when reading back input of size 99
+	if (count >= buffer_size) {	// Removing equals causes seg fault when reading back input of size 99
 		return -ENOSPC;
 	}
 	
@@ -39,11 +39,11 @@ static ssize_t	my_write(struct file *file_pointer, const char *user_space_buffer
 		return -EINVAL;		// Invalid argument
 	}
 
-	if (copy_from_user(msg, user_space_buffer, count)) {
+	if (copy_from_user(msg_buffer, user_space_buffer, count)) {
 		return -EFAULT;
 	}
 
-	msg[count] = '\0';
+	*(msg_buffer + count) = '\0';
 	*offset += count;
 	return count;
 }
@@ -61,13 +61,21 @@ static int __init my_init (void) {
 		return -1;
 	}
 
-	strscpy(msg, "Hey there!\n", sizeof(msg));
+	msg_buffer = kmalloc(buffer_size + 2, GFP_KERNEL);
+
+	if (!msg_buffer) {
+		pr_err("Failed to allocate to buffer\n");
+		return -ENOMEM;
+	}
+
+	strscpy(msg_buffer, "Hey there!\n", buffer_size + 2);
 	
 	pr_info("my_driver: Module loaded\n");
 	return 0;
 }
 
 static void __exit my_exit (void) {
+	kfree(msg_buffer);
 	proc_remove(custom_proc_node);			// This doesn't return anything :/	
 	pr_info("my_driver: Module unloaded\n");
 }
